@@ -13,6 +13,7 @@ use std::time::Duration;
 use std::fs::OpenOptions;
 use std::io::LineWriter;
 use chrono;
+use chrono::{DateTime, Utc};
 
 // Message-code struct
 #[derive(Serialize, Deserialize, Debug)]
@@ -48,13 +49,43 @@ struct OperationRequest {
 // Operation response
 #[derive(Serialize, Deserialize, Debug)]
 struct OperationResponse {
-    ciphertexts : Vec<VectorLWE>
+    ciphertexts : Vec<OperationIndividualResponse>
+}
+
+// Operation response
+#[derive(Serialize, Deserialize, Debug)]
+struct OperationIndividualResponse {
+    ciphertext : VectorLWE,
+    initial_datetime : String,
+    final_datetime : String
 }
 
 fn received_code_0(stream : &TcpStream){
     // Receive ciphertext from sensor
     let ciphertext = receive_ciphertext(stream);
+    // Save ciphertext and add entry to respective DB
     save_ciphertext(stream, ciphertext);
+}
+
+fn received_code_1(stream : &TcpStream){
+    let request : receive_request(stream);
+
+}
+
+fn receive_request(stream : &TcpStream) -> OperationRequest{
+    // RECEIVING MODULE
+    let mut reader = BufReader::new(stream);
+    let mut buffer = Vec::new();
+    buffer.clear();
+    let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
+
+    /*if read_bytes == 0 { // If there is no incoming data
+        return null;
+    }*/
+
+    // Deserialize
+    let request : OperationRequest = serde_json::from_slice(&buffer).unwrap();
+    return request;
 }
 
 fn add_to_database(stream : &TcpStream, ciphertext_filename : String){
@@ -63,13 +94,16 @@ fn add_to_database(stream : &TcpStream, ciphertext_filename : String){
     // Generate peer's Secret Key filename
     let suffix_borrowed : String = "_database.txt".to_owned();
     let filename = format!("{}{}", peer_ip_owned, suffix_borrowed);
+    // Open file or create in case it does not exist
     let file = OpenOptions::new()
         .read(true)
         .write(true)
+        .append(true)
         .create(true)
         .open(&filename).unwrap();
 
     let mut file = LineWriter::new(file);
+    // Write entry-line to file
     file.write_all(ciphertext_filename.as_bytes()).unwrap();
     file.write_all(b"\n").unwrap();
 }
@@ -79,7 +113,7 @@ fn get_ciphertext_filename(stream : &TcpStream) -> String{
     let peer_ip_owned : String = stream.peer_addr().unwrap().ip().to_string().to_owned();
     // Generate peer's Secret Key filename
     let suffix_borrowed : String = "_ciphertext.txt".to_owned();
-    let filename = format!("{}{}{}{}", peer_ip_owned, "_", chrono::offset::Local::now(), suffix_borrowed);
+    let filename = format!("{}{}{}{}", peer_ip_owned, "_", chrono::offset::Local::now().to_rfc3339(), suffix_borrowed);
     return filename;
 }
 
@@ -100,8 +134,11 @@ fn receive_ciphertext(stream : &TcpStream) -> VectorLWE{
 }
 
 fn save_ciphertext(stream : &TcpStream, ciphertext : VectorLWE){
+    // Obtain ciphertext filename
     let ciphertext_filename = get_ciphertext_filename(stream);
+    // Save ciphertext
     ciphertext.save(&ciphertext_filename).unwrap();
+    // Add entry to database
     add_to_database(stream, ciphertext_filename);
 }
 
@@ -125,6 +162,7 @@ fn handle_client(stream : TcpStream){
 
         match msg_code.code {
             0 => received_code_0(stream_ref),
+            1 => received_code_1(stream_ref),
             _ => println!("Incorrect code received!!"),
         }
     }
