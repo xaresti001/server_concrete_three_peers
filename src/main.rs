@@ -161,8 +161,8 @@ fn handle_client(stream : TcpStream){
         let stream_ref = reader.get_ref();
 
         match msg_code.code {
-            0 => received_code_0(stream_ref),
-            1 => received_code_1(stream_ref),
+            0 => received_code_0(stream_ref), // Receive ciphertext from sensor
+            1 => received_code_1(stream_ref), // Receive operation request from client
             _ => println!("Incorrect code received!!"),
         }
     }
