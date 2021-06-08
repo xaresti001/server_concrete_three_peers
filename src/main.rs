@@ -14,6 +14,8 @@ use std::fs::OpenOptions;
 use std::io::LineWriter;
 use chrono;
 use chrono::{DateTime, Utc};
+use rand::distributions::uniform::SampleBorrow;
+use std::convert::TryInto;
 
 // Message-code struct
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,8 +70,46 @@ fn received_code_0(stream : &TcpStream){
 }
 
 fn received_code_1(stream : &TcpStream){
-    let request : receive_request(stream);
+    let request = receive_request(stream);
+    perform_operation(request);
+}
 
+fn perform_operation(request : OperationRequest){
+    // Get filename
+    let filename = format!("{}{}", request.sensor_ip, "_database.txt");
+    // OPen file
+    let file = OpenOptions::new()
+        .read(true)
+        .open(&filename).unwrap();
+    // Obtain reader
+    let reader = BufReader::new(file);
+    // Read lines from file
+    for (index, line) in reader.lines().enumerate() {
+        let mut i : i32 = 1;
+        if index < (i.borrow()*request.ciphertext_amount.borrow()).try_into().unwrap(){ // Needed to convert from i32 to usize
+            // Read file from file
+            let line = line.unwrap(); // Ignore errors.
+            // Show the line and its number.
+            println!("{}. {}", index + 1, line);
+        } else{
+            i = i+1;
+        }
+
+
+    }
+}
+
+fn send_operation_response(mut stream : &TcpStream, response : OperationResponse){
+    // Prepare and send Message Code
+    let msg_code = ConcreteMessageCode {
+        code : 4 // VERIFY THIS CODE
+    };
+    stream.write(serde_json::to_string(&msg_code).unwrap().as_bytes()).unwrap();
+    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+
+    // Send message
+    stream.write(serde_json::to_string(&response).unwrap().as_bytes()).unwrap();
+    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
 }
 
 fn receive_request(stream : &TcpStream) -> OperationRequest{
