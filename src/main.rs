@@ -12,6 +12,7 @@ use ndarray::Array;
 use std::time::Duration;
 use std::fs::OpenOptions;
 use std::io::LineWriter;
+use chrono;
 
 // Message-code struct
 #[derive(Serialize, Deserialize, Debug)]
@@ -78,7 +79,7 @@ fn get_ciphertext_filename(stream : &TcpStream) -> String{
     let peer_ip_owned : String = stream.peer_addr().unwrap().ip().to_string().to_owned();
     // Generate peer's Secret Key filename
     let suffix_borrowed : String = "_ciphertext.txt".to_owned();
-    let filename = format!("{}{}", peer_ip_owned, suffix_borrowed);
+    let filename = format!("{}{}{}{}", peer_ip_owned, "_", chrono::offset::Local::now(), suffix_borrowed);
     return filename;
 }
 
@@ -130,9 +131,9 @@ fn handle_client(stream : TcpStream){
 }
 
 fn main() {
-    let listener = TcpListener::bind("0.0.0.0:4444").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:3333").unwrap();
     // accept connections and process them, spawning a new thread for each one
-    println!("Server listening on port 4444");
+    println!("Server listening on port 3333");
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
