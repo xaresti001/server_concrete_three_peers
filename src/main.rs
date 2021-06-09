@@ -75,20 +75,27 @@ fn received_code_1(stream : &TcpStream){
 }
 
 fn perform_operation(request : OperationRequest){
-    // Get filename
+    // Get requested sensor's filename
     let filename = format!("{}{}", request.sensor_ip, "_database.txt");
-    // OPen file
-    let file = OpenOptions::new()
+    // Open file
+    let file_database = OpenOptions::new()
         .read(true)
         .open(&filename).unwrap();
     // Obtain reader
-    let reader = BufReader::new(file);
+    let reader = BufReader::new(file_database);
     // Read lines from file
+    let mut temp_ciphertext = VectorLWE::zero(0, 0).unwrap(); // IMPORTANT!! THIS MAY NOT BE CORRECT!
     for (index, line) in reader.lines().enumerate() {
         let mut i : i32 = 1;
         if index < (i.borrow()*request.ciphertext_amount.borrow()).try_into().unwrap(){ // Needed to convert from i32 to usize
-            // Read file from file
+            // Read ciphertext filename from file
             let line = line.unwrap(); // Ignore errors.
+            // Open and load ciphertext from filename
+            let mut read_ciphertext = VectorLWE::load(&line).unwrap();
+            if index > 0 {
+                read_ciphertext.add_with_padding_inplace(&temp_ciphertext);
+            }
+            temp_ciphertext = read_ciphertext;
             // Show the line and its number.
             println!("{}. {}", index + 1, line);
         } else{
