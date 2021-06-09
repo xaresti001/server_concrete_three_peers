@@ -44,8 +44,8 @@ struct ConcreteKSK {
 // Operation request
 #[derive(Serialize, Deserialize, Debug)]
 struct OperationRequest {
-    sensor_ip : String,
-    ciphertext_amount : i32
+    ciphertext_amount : i32,
+    sensor_ip : String
 }
 
 // Operation response
@@ -126,9 +126,9 @@ fn receive_request(stream : &TcpStream) -> OperationRequest{
     buffer.clear();
     let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
 
-    /*if read_bytes == 0 { // If there is no incoming data
-        return null;
-    }*/
+    if read_bytes == 0 { // If there is no incoming data
+        return OperationRequest{ciphertext_amount : 1, sensor_ip : "0.0.0.0".to_string()};
+    }
 
     // Deserialize
     let request : OperationRequest = serde_json::from_slice(&buffer).unwrap();
