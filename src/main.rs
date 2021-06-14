@@ -84,16 +84,19 @@ fn perform_operation(request : OperationRequest){
     // Obtain reader
     let reader = BufReader::new(file_database);
     // Read lines from file
-    let mut temp_ciphertext = VectorLWE::zero(0, 0).unwrap(); // IMPORTANT!! THIS MAY NOT BE CORRECT!
+    let mut temp_ciphertext = VectorLWE::zero(0, 1).unwrap(); // IMPORTANT!! THIS MAY NOT BE CORRECT!
     for (index, line) in reader.lines().enumerate() {
         let mut i : i32 = 1;
         if index < (i.borrow()*request.ciphertext_amount.borrow()).try_into().unwrap(){ // Needed to convert from i32 to usize
             // Read ciphertext filename from file
             let line = line.unwrap(); // Ignore errors.
+            if index == 0 {
+                temp_ciphertext = VectorLWE::load(&line).unwrap();
+            }
             // Open and load ciphertext from filename
             let mut read_ciphertext = VectorLWE::load(&line).unwrap();
             if index > 0 {
-                read_ciphertext.add_with_padding_inplace(&temp_ciphertext);
+                read_ciphertext.add_with_padding_inplace(&temp_ciphertext).unwrap();
             }
             temp_ciphertext = read_ciphertext;
             // Show the line and its number.
@@ -111,27 +114,17 @@ fn send_operation_response(mut stream : &TcpStream, response : OperationResponse
     let msg_code = ConcreteMessageCode {
         code : 4 // VERIFY THIS CODE
     };
-    stream.write(serde_json::to_string(&msg_code).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&msg_code).unwrap()).unwrap();
 
     // Send message
-    stream.write(serde_json::to_string(&response).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&response).unwrap()).unwrap();
 }
 
 fn receive_request(stream : &TcpStream) -> OperationRequest{
     // RECEIVING MODULE
-    let mut reader = BufReader::new(stream);
-    let mut buffer = Vec::new();
-    buffer.clear();
-    let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
-
-    if read_bytes == 0 { // If there is no incoming data
-        return OperationRequest{ciphertext_amount : 1, sensor_ip : "0.0.0.0".to_string()};
-    }
-
-    // Deserialize
-    let request : OperationRequest = serde_json::from_slice(&buffer).unwrap();
+    let mut de = serde_json::Deserializer::from_reader(stream);
+    let request : OperationRequest = OperationRequest::deserialize(&mut de).unwrap();
+    println!("Received Request: {} Amount: {}", request.sensor_ip, request.ciphertext_amount);
     return request;
 }
 
@@ -166,17 +159,8 @@ fn get_ciphertext_filename(stream : &TcpStream) -> String{
 
 fn receive_ciphertext(stream : &TcpStream) -> VectorLWE{
     // RECEIVING MODULE
-    let mut reader = BufReader::new(stream);
-    let mut buffer = Vec::new();
-    buffer.clear();
-    let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
-
-    /*if read_bytes == 0 { // If there is no incoming data
-        return null;
-    }*/
-
-    // Deserialize
-    let ciphertext : ConcreteCiphertext = serde_json::from_slice(&buffer).unwrap();
+    let mut de = serde_json::Deserializer::from_reader(stream);
+    let ciphertext : ConcreteCiphertext= ConcreteCiphertext::deserialize(&mut de).unwrap();
     return ciphertext.message;
 }
 
@@ -190,26 +174,15 @@ fn save_ciphertext(stream : &TcpStream, ciphertext : VectorLWE){
 }
 
 fn handle_client(stream : TcpStream){
-    let mut reader = BufReader::new(stream);
-    let mut buffer = Vec::new();
-
     loop{
-        buffer.clear(); // Flush remaining buffer content
-        println!("\n\nWaiting client message...");
-        let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
-
-        if read_bytes == 0 { // If there is no incoming data
-            return ();
-        }
-
-        let msg_code : ConcreteMessageCode = serde_json::from_slice(&buffer).unwrap();
+        // RECEIVING MODULE
+        let mut de = serde_json::Deserializer::from_reader(&stream);
+        let msg_code : ConcreteMessageCode= ConcreteMessageCode::deserialize(&mut de).unwrap();
         println!("Received message-code: {:?}", msg_code.code);
 
-        let stream_ref = reader.get_ref();
-
         match msg_code.code {
-            0 => received_code_0(stream_ref), // Receive ciphertext from sensor
-            1 => received_code_1(stream_ref), // Receive operation request from client
+            0 => received_code_0(&stream), // Receive ciphertext from sensor
+            1 => received_code_1(&stream), // Receive operation request from client
             _ => println!("Incorrect code received!!"),
         }
     }
