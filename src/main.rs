@@ -74,7 +74,7 @@ fn received_code_1(stream : &TcpStream){
     perform_operation(request);
 }
 
-fn perform_operation(request : OperationRequest){
+fn perform_operation(request : OperationRequest) -> OperationResponse{
     // Get requested sensor's filename
     let filename = format!("{}{}", request.sensor_ip, "_database.txt");
     // Open file
@@ -83,30 +83,54 @@ fn perform_operation(request : OperationRequest){
         .open(&filename).unwrap();
     // Obtain reader
     let reader = BufReader::new(file_database);
-    // Read lines from file
-    let mut temp_ciphertext = VectorLWE::zero(0, 1).unwrap(); // IMPORTANT!! THIS MAY NOT BE CORRECT!
+    // Create individual response vector
+    let mut operation_response : Vec<OperationIndividualResponse> = Vec::new();
+    // Dummy variable
+    let mut temp_ciphertext : VectorLWE = VectorLWE::zero(1, 1).unwrap(); // IMPORTANT!! THIS MAY NOT BE CORRECT!
+    // Read lines from file and collect into vector
+    let mut filename_vec : Vec<String> = Vec::new();
     for (index, line) in reader.lines().enumerate() {
-        let mut i : i32 = 1;
-        if index < (i.borrow()*request.ciphertext_amount.borrow()).try_into().unwrap(){ // Needed to convert from i32 to usize
-            // Read ciphertext filename from file
-            let line = line.unwrap(); // Ignore errors.
-            if index == 0 {
-                temp_ciphertext = VectorLWE::load(&line).unwrap();
-            }
-            // Open and load ciphertext from filename
-            let mut read_ciphertext = VectorLWE::load(&line).unwrap();
-            if index > 0 {
-                read_ciphertext.add_with_padding_inplace(&temp_ciphertext).unwrap();
-            }
-            temp_ciphertext = read_ciphertext;
-            // Show the line and its number.
-            println!("{}. {}", index + 1, line);
-        } else{
-            i = i+1;
-        }
-
-
+        let line = line.unwrap(); // Retrieve line from file
+        println!("{:?}", line);
+        filename_vec.push(line); // Push filename to vector
     }
+    // For each chunk of data calculate mean value
+    for chunk in filename_vec.chunks(request.ciphertext_amount.try_into().unwrap()) {
+        for (index, element) in chunk.iter().enumerate() {
+            println!("{}", index);
+            if index == 0 {
+                temp_ciphertext = VectorLWE::load(&element).unwrap();
+                println!("{}", element);
+            }else{
+                let mut loaded_ciphertext : VectorLWE = VectorLWE::load(&element).unwrap();
+                println!("Bai: {}", element);
+                loaded_ciphertext.add_with_padding(&temp_ciphertext).unwrap();
+                temp_ciphertext = loaded_ciphertext;
+            }
+        }
+        let divisor : f64 = (1/request.ciphertext_amount.borrow()) as f64;
+        // Create constants vector
+        let constants : Vec<f64> = vec![divisor; chunk.len()+1];
+        // Perform multiplication (divide to calculate mean)
+        temp_ciphertext.mul_constant_with_padding_inplace(&constants, 1.0, 1).unwrap();
+        // Obtain initial DateTime
+        let initial_date : Vec<&str> = chunk[0].split("_").collect();
+        // Obtain final DateTime
+        let final_date : Vec<&str> = chunk[chunk.len()-1].split("_").collect();
+        // Generate individual response
+        let operation_individual_response = OperationIndividualResponse{
+            ciphertext : temp_ciphertext.clone(),
+            initial_datetime : initial_date[1].to_string(),
+            final_datetime : final_date[1].to_string()
+        };
+        // Push individual response into vector
+        operation_response.push(operation_individual_response);
+    }
+    // Generate final message from vector
+    let final_operation_response = OperationResponse{
+        ciphertexts : operation_response
+    };
+    return final_operation_response;
 }
 
 fn send_operation_response(mut stream : &TcpStream, response : OperationResponse){
