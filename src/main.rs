@@ -70,8 +70,9 @@ fn received_code_0(stream : &TcpStream){
 }
 
 fn received_code_1(stream : &TcpStream){
-    let request = receive_request(stream);
-    perform_operation(request);
+    let request : OperationRequest = receive_request(stream);
+    let response : OperationResponse = perform_operation(request);
+    send_operation_response(stream, response);
 }
 
 fn perform_operation(request : OperationRequest) -> OperationResponse{
@@ -102,17 +103,18 @@ fn perform_operation(request : OperationRequest) -> OperationResponse{
                 temp_ciphertext = VectorLWE::load(&element).unwrap();
                 println!("{}", element);
             }else{
-                let mut loaded_ciphertext : VectorLWE = VectorLWE::load(&element).unwrap();
+                let loaded_ciphertext : VectorLWE = VectorLWE::load(&element).unwrap();
                 println!("Bai: {}", element);
-                loaded_ciphertext.add_with_padding(&temp_ciphertext).unwrap();
-                temp_ciphertext = loaded_ciphertext;
+                let new_min: Vec<f64> = vec![0., 0., 0.];
+                temp_ciphertext.add_with_new_min_inplace(&loaded_ciphertext, &new_min).unwrap();
             }
         }
-        let divisor : f64 = (1/request.ciphertext_amount.borrow()) as f64;
+        let divisor : f64 = 1.0/(chunk.len() as f64);
         // Create constants vector
-        let constants : Vec<f64> = vec![divisor; chunk.len()+1];
+        let constants : Vec<f64> = vec![divisor; 3];
+        println!("Divisor: {:?}", constants);
         // Perform multiplication (divide to calculate mean)
-        temp_ciphertext.mul_constant_with_padding_inplace(&constants, 1.0, 1).unwrap();
+        temp_ciphertext.mul_constant_with_padding_inplace(&constants, 1.0, 10).unwrap();
         // Obtain initial DateTime
         let initial_date : Vec<&str> = chunk[0].split("_").collect();
         // Obtain final DateTime
