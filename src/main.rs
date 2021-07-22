@@ -114,7 +114,7 @@ fn perform_operation(request : OperationRequest) -> OperationResponse{
         let constants : Vec<f64> = vec![divisor; 3];
         println!("Divisor: {:?}", constants);
         // Perform multiplication (divide to calculate mean)
-        temp_ciphertext.mul_constant_with_padding_inplace(&constants, 1., 15).unwrap();
+        temp_ciphertext.mul_constant_with_padding_inplace(&constants, 1., 16).unwrap();
         // Obtain initial DateTime
         let initial_date : Vec<&str> = chunk[0].split("_").collect();
         // Obtain final DateTime
